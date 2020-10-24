@@ -3,12 +3,165 @@
  */
 package ml.ovcorp.students.distributor;
 
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
 public class App {
-    public String getGreeting() {
-        return "Hello world.";
+
+    private static final String PATH_DIR = System.getProperty("user.dir") + File.separator;
+
+    public static void main(String[] args) throws IOException {
+
+        Map<Integer, Integer> variants = new HashMap<>();
+        for (int i = 1; i <= 19; i++) {
+            variants.put(i, 0);
+        }
+        variants.remove(9);
+        variants.remove(35);
+
+        Map<String, Integer> studentsWithVariants = readStudentsFromExcel("students-v.xlsx");
+
+        if (studentsWithVariants == null) {
+            return;
+        }
+
+        for (Map.Entry<String, Integer> entry : studentsWithVariants.entrySet()) {
+            if (entry.getValue() == 0) {
+                int rand = (int) (Math.random() * variants.size());
+                Integer countUse = variants.get(rand);
+                if (countUse != null && countUse == 0) {
+                    countUse++;
+                    variants.put(rand, countUse);
+                    studentsWithVariants.put(entry.getKey(), rand);
+                } else {
+                    int minCountUse = Integer.MAX_VALUE;
+                    for (Map.Entry<Integer, Integer> entry1 : variants.entrySet()) {
+                        if (entry1.getValue() < minCountUse) {
+                            minCountUse = entry1.getValue();
+                        }
+                    }
+                    List<Integer> randomizeVariants = new LinkedList<>();
+                    for (Map.Entry<Integer, Integer> e : variants.entrySet()) {
+                        if (e.getValue() == minCountUse) {
+                            randomizeVariants.add(e.getKey());
+                        }
+                    }
+                    Collections.shuffle(randomizeVariants);
+
+                    Integer v = randomizeVariants.get(randomizeVariants.size() / 2);
+                    studentsWithVariants.put(entry.getKey(), v);
+                    variants.put(v, minCountUse + 1);
+                }
+            }
+        }
+
+        writeStudentsToExcel("students-variants.xls", studentsWithVariants);
     }
 
-    public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+    public static Map<String, Integer> readStudentsFromExcel(String file) throws IOException {
+        Workbook workbook;
+        if (file.contains("xlsx")) {
+            workbook = new XSSFWorkbook(new FileInputStream(PATH_DIR + file));
+        } else if (file.contains("xls")) {
+            workbook = new HSSFWorkbook(new FileInputStream(PATH_DIR + file));
+        } else {
+            return null;
+        }
+
+        Sheet sheet = workbook.getSheetAt(0);
+
+        Row row = sheet.getRow(0);
+
+        Cell fioCellName = row.getCell(0);
+        Cell variantCellName = row.getCell(1);
+
+        if (fioCellName.getStringCellValue().equals("Фамилия") &&
+                variantCellName.getStringCellValue().equals("Вариант")) {
+            Map<String, Integer> studentsAndVariants = new LinkedHashMap<>();
+
+            int rowIndex = 1;
+            do {
+                row = sheet.getRow(rowIndex);
+
+                if (row == null) {
+                    break;
+                }
+
+                Cell fioCellValue = row.getCell(0);
+
+                String key = null;
+                if (fioCellValue.getCellType() == CellType.STRING) {
+                    key = fioCellValue.getStringCellValue();
+                }
+
+                studentsAndVariants.put(key, 0);
+                rowIndex++;
+            } while (true);
+
+            return studentsAndVariants;
+        } else {
+            System.err.println("Неверный формат файла");
+            return null;
+        }
     }
+
+    public static void writeStudentsToExcel(String file, Map<String, Integer> maps) throws IOException {
+        Workbook workbook;
+        if (file.contains("xlsx")) {
+            workbook = new XSSFWorkbook();
+        } else if (file.contains("xls")) {
+            workbook = new HSSFWorkbook();
+        } else {
+            return;
+        }
+
+        Sheet sheet = workbook.createSheet("Student Informatics");
+
+        Row row = sheet.createRow(0);
+        CellStyle cellStyle = workbook.createCellStyle();
+        cellStyle.setBorderBottom(BorderStyle.DOUBLE);
+        cellStyle.setBorderTop(BorderStyle.DOUBLE);
+        cellStyle.setBorderRight(BorderStyle.DOUBLE);
+        cellStyle.setBorderLeft(BorderStyle.DOUBLE);
+
+        Cell fioCellName = row.createCell(0);
+        fioCellName.setCellValue("Фамилия");
+        fioCellName.setCellStyle(cellStyle);
+
+        Cell variantCellName = row.createCell(1);
+        variantCellName.setCellValue("Вариант");
+        variantCellName.setCellStyle(cellStyle);
+
+        cellStyle = workbook.createCellStyle();
+        cellStyle.setBorderLeft(BorderStyle.THIN);
+        cellStyle.setBorderBottom(BorderStyle.THIN);
+        cellStyle.setBorderRight(BorderStyle.THIN);
+
+        int rowIndex = 1;
+        for (Map.Entry<String, Integer> entry : maps.entrySet()) {
+            row = sheet.createRow(rowIndex);
+
+            Cell fioCellValue = row.createCell(0);
+            fioCellValue.setCellValue(entry.getKey());
+            fioCellValue.setCellStyle(cellStyle);
+
+            Cell variantCellValue = row.createCell(1);
+            variantCellValue.setCellValue(entry.getValue());
+            variantCellValue.setCellStyle(cellStyle);
+
+            rowIndex++;
+        }
+
+        sheet.autoSizeColumn(0);
+        sheet.autoSizeColumn(1);
+
+        workbook.write(new FileOutputStream(PATH_DIR + file));
+        workbook.close();
+    }
+
 }
